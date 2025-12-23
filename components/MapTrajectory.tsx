@@ -51,13 +51,18 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
     if (!mapRef.current) return;
     if (leafletMapRef.current) return;
 
+    // Initialize map centered on Taiwan with appropriate zoom
     const map = L.map(mapRef.current, {
-       zoomControl: false,
-       attributionControl: false
-    }).setView([24.1368, 120.6850], 9);
+       zoomControl: true,
+       attributionControl: true,
+       preferCanvas: true,
+       minZoom: 7,
+       maxZoom: 18
+    }).setView([23.8, 120.9], 8); // Taiwan center
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
     leafletMapRef.current = map;
@@ -191,7 +196,7 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
       }
     });
 
-    // Draw Line
+    // Draw Line and fit bounds
     if (points.length > 1) {
       L.polyline(points, {
         color: '#fbbf24',
@@ -203,14 +208,28 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
       const group = new L.FeatureGroup(markers);
       markerGroupRef.current = group;
-      map.fitBounds(group.getBounds().pad(0.2));
+      // Fit bounds with less padding to reduce whitespace
+      map.fitBounds(group.getBounds().pad(0.15), {
+        animate: true,
+        duration: 1
+      });
+    } else if (points.length === 1) {
+      // If only one point, center on it with zoom 12
+      map.setView(points[0], 12);
     }
+    // If no points, keep default Taiwan view
 
   }, [scheduleData]);
 
   const handleRefresh = () => {
     if (leafletMapRef.current && markerGroupRef.current) {
-        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.2), {
+        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.15), {
+            animate: true,
+            duration: 1
+        });
+    } else if (leafletMapRef.current) {
+        // If no markers, reset to Taiwan center
+        leafletMapRef.current.setView([23.8, 120.9], 8, {
             animate: true,
             duration: 1
         });
@@ -218,7 +237,7 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
   };
 
   return (
-    <div className="w-full h-full rounded-3xl overflow-hidden shadow-inner border-4 border-white relative">
+    <div className="w-full h-full rounded-3xl overflow-hidden shadow-inner relative">
         <div ref={mapRef} className="w-full h-full bg-slate-100" />
         
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-[400]">
@@ -226,7 +245,7 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
            <button
              onClick={handleRefresh}
              className="bg-white/95 backdrop-blur p-3 rounded-full shadow-xl border border-slate-100 text-slate-600 font-bold flex items-center justify-center hover:scale-105 transition-transform hover:bg-slate-50"
-             title="Reset View"
+             title="重置視角"
            >
               <RefreshCw size={20} />
            </button>
@@ -236,20 +255,73 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
               target="_blank" 
               rel="noopener noreferrer"
               className="bg-white/95 backdrop-blur p-3 rounded-full shadow-xl border border-slate-100 text-blue-500 font-bold flex items-center justify-center hover:scale-105 transition-transform"
-              title="Open Google Maps List"
+              title="開啟 Google Maps"
            >
               <MapIcon size={20} />
            </a>
         </div>
         
         <style>{`
-            .leaflet-popup-content-wrapper { border-radius: 1rem; padding: 0; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
-            .leaflet-popup-content { margin: 0.75rem; line-height: 1.5; }
-            .leaflet-popup-tip { background: white; }
-            .user-pulse-icon { position: relative; }
-            .user-dot { width: 12px; height: 12px; background-color: #3b82f6; border: 2px solid white; border-radius: 50%; position: absolute; top: 6px; left: 6px; z-index: 2; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-            .pulse-ring { position: absolute; top: 0; left: 0; width: 24px; height: 24px; background-color: rgba(59, 130, 246, 0.4); border-radius: 50%; animation: pulse 2s infinite; }
-            @keyframes pulse { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
+            /* Map container styles */
+            .leaflet-container {
+                width: 100%;
+                height: 100%;
+                background: #f1f5f9;
+            }
+            
+            /* Move zoom control to bottom right */
+            .leaflet-top.leaflet-left {
+                top: auto;
+                bottom: 20px;
+                left: auto;
+                right: 20px;
+            }
+            
+            /* Popup styles */
+            .leaflet-popup-content-wrapper { 
+                border-radius: 1rem; 
+                padding: 0; 
+                overflow: hidden; 
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
+            }
+            .leaflet-popup-content { 
+                margin: 0.75rem; 
+                line-height: 1.5; 
+            }
+            .leaflet-popup-tip { 
+                background: white; 
+            }
+            
+            /* User location marker */
+            .user-pulse-icon { 
+                position: relative; 
+            }
+            .user-dot { 
+                width: 12px; 
+                height: 12px; 
+                background-color: #3b82f6; 
+                border: 2px solid white; 
+                border-radius: 50%; 
+                position: absolute; 
+                top: 6px; 
+                left: 6px; 
+                z-index: 2; 
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
+            }
+            .pulse-ring { 
+                position: absolute; 
+                top: 0; 
+                left: 0; 
+                width: 24px; 
+                height: 24px; 
+                background-color: rgba(59, 130, 246, 0.4); 
+                border-radius: 50%; 
+                animation: pulse 2s infinite; 
+            }
+            @keyframes pulse { 
+                0% { transform: scale(0.5); opacity: 1; } 
+                100% { transform: scale(2); opacity: 0; } 
+            }
         `}</style>
     </div>
   );
