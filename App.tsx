@@ -57,6 +57,43 @@ const App: React.FC = () => {
       return <LoginGate onUnlock={() => setIsAuthenticated(true)} />;
   }
 
+  // Full-screen Map View
+  if (viewMode === 'MAP') {
+    return (
+      <div className="w-full h-screen bg-slate-900 font-sans text-gray-900 selection:bg-pink-200 relative">
+        {/* Full-screen Map */}
+        <div className="w-full h-full">
+          <MapTrajectory scheduleData={scheduleData} />
+        </div>
+
+        {/* Back to List View Button */}
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none px-6">
+          <button 
+            onClick={() => setViewMode('LIST')}
+            className="pointer-events-auto bg-slate-800 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center justify-center gap-2 font-bold transform transition active:scale-95 hover:bg-slate-700 border-2 border-slate-700"
+          >
+            <List size={18} />
+            <span>Back to List</span>
+          </button>
+        </div>
+
+        {/* 3D Weather Modal */}
+        {showWeather && (
+          <ThreeWeather 
+            day="Today" 
+            onClose={() => setShowWeather(false)} 
+          />
+        )}
+
+        {/* Hidden Healing Message */}
+        {showHealingMessage && (
+          <HealingMessage onClose={() => setShowHealingMessage(false)} />
+        )}
+      </div>
+    );
+  }
+
+  // List View (Default)
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex justify-center font-sans text-gray-900 selection:bg-pink-200">
       <div className="w-full max-w-md bg-white shadow-2xl min-h-screen flex flex-col relative">
@@ -107,62 +144,42 @@ const App: React.FC = () => {
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 px-4 mt-[-20px] bg-contain relative z-20 pb-32" style={{ backgroundImage: viewMode === 'LIST' ? 'radial-gradient(#e5e7eb 1px, transparent 1px)' : 'none', backgroundSize: '20px 20px' }}>
-          
-          {viewMode === 'LIST' ? (
-              <div className="mt-8">
-                  {scheduleData.map((day, index) => (
-                      <div key={day.date}>
-                          <DaySection 
-                              day={day} 
-                              isLastDay={index === scheduleData.length - 1} 
-                          />
-                      </div>
-                  ))}
+        <main className="flex-1 px-4 mt-[-20px] bg-contain relative z-20 pb-32" style={{ backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+          <div className="mt-8">
+            {scheduleData.map((day, index) => (
+              <div key={day.date}>
+                <DaySection 
+                  day={day} 
+                  isLastDay={index === scheduleData.length - 1} 
+                />
               </div>
-          ) : (
-              <div className="w-full mt-8" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
-                  <MapTrajectory scheduleData={scheduleData} />
-                  <div className="text-center mt-4 text-xs text-slate-400 font-medium">
-                      點擊標記可查看導航
-                  </div>
-              </div>
-          )}
-
+            ))}
+          </div>
         </main>
 
         {/* Footer / Floating Action */}
         <div className="fixed bottom-8 left-0 right-0 flex justify-center gap-4 z-40 pointer-events-none px-6 w-full max-w-md mx-auto">
-            {/* View Toggle Button (Map / List) */}
-            <button 
-                onClick={() => setViewMode(viewMode === 'LIST' ? 'MAP' : 'LIST')}
-                className="pointer-events-auto flex-1 bg-slate-800 text-white py-3 rounded-2xl shadow-xl flex items-center justify-center gap-2 font-bold transform transition active:scale-95 hover:bg-slate-700 border-2 border-slate-700"
-            >
-                {viewMode === 'LIST' ? (
-                    <>
-                        <Map size={18} />
-                        <span>Map View</span>
-                    </>
-                ) : (
-                    <>
-                        <List size={18} />
-                        <span>List View</span>
-                    </>
-                )}
-            </button>
+          {/* Map View Button */}
+          <button 
+            onClick={() => setViewMode('MAP')}
+            className="pointer-events-auto flex-1 bg-slate-800 text-white py-3 rounded-2xl shadow-xl flex items-center justify-center gap-2 font-bold transform transition active:scale-95 hover:bg-slate-700 border-2 border-slate-700"
+          >
+            <Map size={18} />
+            <span>Map View</span>
+          </button>
         </div>
 
         {/* 3D Weather Modal */}
         {showWeather && (
-            <ThreeWeather 
-                day="Today" 
-                onClose={() => setShowWeather(false)} 
-            />
+          <ThreeWeather 
+            day="Today" 
+            onClose={() => setShowWeather(false)} 
+          />
         )}
 
         {/* Hidden Healing Message (Triggered via Heart Icon) */}
         {showHealingMessage && (
-            <HealingMessage onClose={() => setShowHealingMessage(false)} />
+          <HealingMessage onClose={() => setShowHealingMessage(false)} />
         )}
 
       </div>

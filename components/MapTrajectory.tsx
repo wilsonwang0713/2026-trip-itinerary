@@ -210,10 +210,11 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
       const group = new L.FeatureGroup(markers);
       markerGroupRef.current = group;
-      // Fit bounds with better padding for mobile visibility
-      map.fitBounds(group.getBounds().pad(0.25), {
+      // Fit bounds with better padding for mobile visibility and bottom button
+      map.fitBounds(group.getBounds().pad(0.35), {
         animate: true,
-        duration: 1
+        duration: 1,
+        paddingBottomRight: [0, 120]
       });
     } else if (points.length === 1) {
       // If only one point, center on it with zoom 12
@@ -225,9 +226,10 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
   const handleRefresh = () => {
     if (leafletMapRef.current && markerGroupRef.current) {
-        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.25), {
+        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.35), {
             animate: true,
-            duration: 1
+            duration: 1,
+            paddingBottomRight: [0, 120]
         });
     } else if (leafletMapRef.current) {
         // If no markers, reset to Taiwan center
@@ -240,7 +242,7 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
   return (
     <div className="w-full h-full rounded-3xl overflow-hidden shadow-inner relative">
-        <div ref={mapRef} className="w-full h-full bg-slate-100" />
+        <div ref={mapRef} className="w-full h-full pb-24 bg-slate-100" />
         
         <div className="absolute top-4 right-4 flex flex-col gap-2 z-[400]">
            {/* Refresh Button */}
