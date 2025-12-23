@@ -56,9 +56,11 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
        zoomControl: true,
        attributionControl: true,
        preferCanvas: true,
-       minZoom: 7,
-       maxZoom: 18
-    }).setView([23.8, 120.9], 8); // Taiwan center
+       minZoom: 6,
+       maxZoom: 18,
+       maxBounds: [[21.5, 119.0], [25.5, 122.5]], // Restrict to Taiwan area
+       maxBoundsViscosity: 0.5
+    }).setView([23.5, 120.8], 7.5); // Taiwan center, better initial zoom
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -208,8 +210,8 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
       const group = new L.FeatureGroup(markers);
       markerGroupRef.current = group;
-      // Fit bounds with less padding to reduce whitespace
-      map.fitBounds(group.getBounds().pad(0.15), {
+      // Fit bounds with better padding for mobile visibility
+      map.fitBounds(group.getBounds().pad(0.25), {
         animate: true,
         duration: 1
       });
@@ -223,13 +225,13 @@ export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) =>
 
   const handleRefresh = () => {
     if (leafletMapRef.current && markerGroupRef.current) {
-        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.15), {
+        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.25), {
             animate: true,
             duration: 1
         });
     } else if (leafletMapRef.current) {
         // If no markers, reset to Taiwan center
-        leafletMapRef.current.setView([23.8, 120.9], 8, {
+        leafletMapRef.current.setView([23.5, 120.8], 7.5, {
             animate: true,
             duration: 1
         });

@@ -121,7 +121,7 @@ const App: React.FC = () => {
                   ))}
               </div>
           ) : (
-              <div className="h-[65vh] w-full mt-8">
+              <div className="w-full mt-8" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
                   <MapTrajectory scheduleData={scheduleData} />
                   <div className="text-center mt-4 text-xs text-slate-400 font-medium">
                       點擊標記可查看導航
