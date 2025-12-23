@@ -92,6 +92,14 @@ export const ITINERARY_DATA: DaySchedule[] = [
         isHighlight: true
       },
       {
+        id: "d2-hotel",
+        time: "Check-in",
+        title: "縵和旅居",
+        location: "Harmony Hotel",
+        type: ActivityType.HOTEL,
+        coordinates: { lat: 24.1415, lng: 120.6780 }
+      },
+      {
         id: "d2-dinner",
         time: "19:00",
         title: "湯棧 公益店",
@@ -101,14 +109,6 @@ export const ITINERARY_DATA: DaySchedule[] = [
           "訂位：陳姵妏"
         ],
         coordinates: { lat: 24.1519, lng: 120.6433 }
-      },
-      {
-        id: "d2-hotel",
-        time: "Check-in",
-        title: "縵和旅居",
-        location: "Harmony Hotel",
-        type: ActivityType.HOTEL,
-        coordinates: { lat: 24.1415, lng: 120.6780 }
       }
     ],
     recommendations: TAICHUNG_RECOMMENDATIONS
@@ -135,6 +135,14 @@ export const ITINERARY_DATA: DaySchedule[] = [
         location: "City Parking 屏東民權站對面 The One",
         isHighlight: true,
         coordinates: { lat: 22.6714, lng: 120.4870 } // Approx
+      },
+      {
+        id: "d3-hotel",
+        time: "Check-in",
+        title: "屏東住宿",
+        location: "No. 42, Ruihua St, Pingtung City, Pingtung County, 900",
+        type: ActivityType.HOTEL,
+        coordinates: { lat: 22.665276, lng: 120.508787 }
       }
     ]
   },

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import { DaySchedule, ActivityType } from '../types';
-import { Navigation, RefreshCw, Map as MapIcon } from 'lucide-react';
+import { DaySchedule, ActivityType, ItineraryItem } from '../types';
+import { RefreshCw, Map as MapIcon, ChevronDown } from 'lucide-react';
+import { getActivityColor } from '../utils/mapHelpers';
 
 interface MapTrajectoryProps {
   scheduleData: DaySchedule[];
@@ -9,324 +9,514 @@ interface MapTrajectoryProps {
 
 export const MapTrajectory: React.FC<MapTrajectoryProps> = ({ scheduleData }) => {
   const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const userMarkerRef = useRef<L.Marker | null>(null);
-  const markerGroupRef = useRef<L.FeatureGroup | null>(null);
+  const googleMapRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+  const userMarkerRef = useRef<google.maps.Marker | null>(null);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [showRouteLines, setShowRouteLines] = useState(true);
+  const [showDayFilter, setShowDayFilter] = useState(false);
 
-  // Track User Location
+  // Initialize Google Map
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!mapRef.current || googleMapRef.current) return;
+
+    // Wait for Google Maps API to load
+    const initMap = () => {
+      if (!window.google) {
+        setTimeout(initMap, 100);
+        return;
+      }
+
+      setIsLoading(true);
+
+      // Create map centered on Taiwan
+      const map = new google.maps.Map(mapRef.current!, {
+        center: { lat: 23.5, lng: 120.8 },
+        zoom: 8,
+        minZoom: 6,
+        maxZoom: 18,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: true,
+        zoomControlOptions: {
+          position: google.maps.ControlPosition.RIGHT_CENTER,
+        },
+        gestureHandling: 'greedy',
+        styles: [
+          {
+            featureType: 'poi',
+            elementType: 'labels',
+            stylers: [{ visibility: 'off' }],
+          },
+        ],
+      });
+
+      googleMapRef.current = map;
+      setIsLoading(false);
+    };
+
+    initMap();
+  }, []);
+
+  // Track user location
+  useEffect(() => {
+    if (!navigator.geolocation || !googleMapRef.current) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const latLng: L.LatLngExpression = [latitude, longitude];
+        const userLocation = { lat: latitude, lng: longitude };
 
-        if (leafletMapRef.current) {
-          if (!userMarkerRef.current) {
-            const pulseIcon = L.divIcon({
-                className: 'user-pulse-icon',
-                html: `<div class="pulse-ring"></div><div class="user-dot"></div>`,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-
-            userMarkerRef.current = L.marker(latLng, { icon: pulseIcon }).addTo(leafletMapRef.current);
-            userMarkerRef.current.bindPopup("You are here");
-          } else {
-            userMarkerRef.current.setLatLng(latLng);
-          }
+        if (!userMarkerRef.current && googleMapRef.current) {
+          userMarkerRef.current = new google.maps.Marker({
+            position: userLocation,
+            map: googleMapRef.current,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: '#3b82f6',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 3,
+            },
+            title: '你在這裡',
+            zIndex: 1000,
+          });
+        } else if (userMarkerRef.current) {
+          userMarkerRef.current.setPosition(userLocation);
         }
       },
-      (error) => {
-        console.warn("Geolocation error:", error);
-      },
+      (error) => console.warn('Geolocation error:', error),
       { enableHighAccuracy: true }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // Update markers and routes when data or filters change
   useEffect(() => {
-    if (!mapRef.current) return;
-    if (leafletMapRef.current) return;
+    if (!googleMapRef.current) return;
 
-    // Initialize map centered on Taiwan with appropriate zoom
-    const map = L.map(mapRef.current, {
-       zoomControl: true,
-       attributionControl: true,
-       preferCanvas: true,
-       minZoom: 6,
-       maxZoom: 18,
-       maxBounds: [[21.5, 119.0], [25.5, 122.5]], // Restrict to Taiwan area
-       maxBoundsViscosity: 0.5
-    }).setView([23.5, 120.8], 7.5); // Taiwan center, better initial zoom
+    // Clear existing markers and polylines
+    markersRef.current.forEach(marker => marker.setMap(null));
+    polylinesRef.current.forEach(polyline => polyline.setMap(null));
+    markersRef.current = [];
+    polylinesRef.current = [];
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    leafletMapRef.current = map;
-
-    const points: L.LatLngExpression[] = [];
-    const markers: L.Marker[] = [];
-
-    // Helper: Create Main Schedule Icon
-    const createScheduleIcon = (color: string, number: number) => {
-        return L.divIcon({
-            className: 'custom-div-icon',
-            html: `
-                <div style="
-                    background-color: ${color};
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 50%;
-                    border: 3px solid white;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: 800;
-                    color: white;
-                    font-family: sans-serif;
-                    font-size: 14px;
-                ">${number}</div>
-                <div style="
-                    width: 2px;
-                    height: 10px;
-                    background-color: ${color};
-                    margin: 0 auto;
-                "></div>
-            `,
-            iconSize: [28, 40],
-            iconAnchor: [14, 40],
-            popupAnchor: [0, -36]
-        });
-    };
-
-    // Helper: Create Recommendation Icon (Small Dot)
-    const createRecIcon = () => {
-        return L.divIcon({
-            className: 'custom-rec-icon',
-            html: `<div style="width: 12px; height: 12px; background-color: #fbbf24; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>`,
-            iconSize: [12, 12],
-            iconAnchor: [6, 6],
-            popupAnchor: [0, -6]
-        });
-    };
-
+    const points: google.maps.LatLngLiteral[] = [];
+    const bounds = new google.maps.LatLngBounds();
     let counter = 1;
-    const addedRecCoords = new Set<string>();
 
-    scheduleData.forEach(day => {
-      // 1. Plot Main Itinerary Items
+    // Filter schedule data by selected day
+    const filteredSchedule = selectedDay
+      ? scheduleData.filter(day => day.date === selectedDay)
+      : scheduleData;
+
+    filteredSchedule.forEach(day => {
       day.items.forEach(item => {
         if (item.coordinates) {
-          const { lat, lng } = item.coordinates;
-          points.push([lat, lng]);
+          const position = {
+            lat: item.coordinates.lat,
+            lng: item.coordinates.lng,
+          };
+          points.push(position);
+          bounds.extend(position);
 
-          let color = '#64748b'; 
-          switch (item.type) {
-            case ActivityType.TRANSPORT: color = '#3b82f6'; break;
-            case ActivityType.HOTEL: color = '#a855f7'; break;
-            case ActivityType.FOOD: color = '#f97316'; break;
-            case ActivityType.SIGHTSEEING: color = '#0d9488'; break;
-            case ActivityType.TICKET: color = '#eab308'; break;
-            case ActivityType.ACTIVITY: color = '#22c55e'; break;
-            case ActivityType.MEETING: color = '#ec4899'; break;
-          }
+          const color = getActivityColor(item.type);
 
-          const marker = L.marker([lat, lng], {
-            icon: createScheduleIcon(color, counter++)
-          }).addTo(map);
-          
-          const popupContent = `
-            <div class="font-sans p-1 min-w-[200px]">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">${day.date}</span>
-                    <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">${item.time}</span>
-                </div>
-                <div class="text-[15px] font-black text-slate-800 leading-tight mb-2">${item.title}</div>
-                ${item.location ? `<div class="flex items-start gap-1.5 text-xs text-slate-500 mb-2 font-medium">📍 ${item.location}</div>` : ''}
-                <a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" 
-                   class="block w-full text-center bg-blue-600 !text-white text-xs font-bold py-2 rounded-lg mt-3 shadow-md hover:bg-blue-700 transition-colors" 
-                   style="text-decoration: none; color: white !important;">
-                   🚗 導航前往
-                </a>
+          // Create custom marker with number
+          const marker = new google.maps.Marker({
+            position,
+            map: googleMapRef.current!,
+            label: {
+              text: counter.toString(),
+              color: '#ffffff',
+              fontSize: '14px',
+              fontWeight: 'bold',
+            },
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 16,
+              fillColor: color,
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 3,
+            },
+            title: item.title,
+            zIndex: counter,
+          });
+
+          // Create info window
+          const infoContent = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 12px; min-width: 220px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="background: linear-gradient(135deg, #334155 0%, #1e293b 100%); color: white; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 12px; text-transform: uppercase;">${day.date}</span>
+                <span style="font-size: 12px; font-weight: bold; color: #475569; background: #f1f5f9; padding: 4px 12px; border-radius: 8px;">${item.time}</span>
+              </div>
+              <div style="font-size: 16px; font-weight: 900; color: #0f172a; margin-bottom: 8px; line-height: 1.3;">${item.title}</div>
+              ${item.location ? `<div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">📍 ${item.location}</div>` : ''}
+              ${item.description ? `<div style="font-size: 12px; color: #94a3b8; margin-bottom: 12px; line-height: 1.5;">${item.description}</div>` : ''}
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}" 
+                 target="_blank" 
+                 style="display: block; text-align: center; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; font-size: 13px; font-weight: bold; padding: 10px; border-radius: 12px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
+                🚗 導航前往
+              </a>
             </div>
           `;
-          
-          marker.bindPopup(popupContent, { closeButton: false, className: 'custom-popup', minWidth: 220 });
-          marker.on('click', () => map.flyTo([lat, lng], 16, { animate: true, duration: 1.2 }));
-          markers.push(marker);
+
+          const infoWindow = new google.maps.InfoWindow({
+            content: infoContent,
+          });
+
+          marker.addListener('click', () => {
+            infoWindow.open(googleMapRef.current!, marker);
+            googleMapRef.current!.panTo(position);
+          });
+
+          markersRef.current.push(marker);
+          counter++;
         }
       });
 
-      // 2. Plot Recommendations (Coffee/Spots)
+      // Add recommendation markers (smaller, different style)
       if (day.recommendations) {
         day.recommendations.forEach(group => {
-            group.items.forEach(rec => {
-                if (rec.coordinates) {
-                    const coordKey = `${rec.coordinates.lat},${rec.coordinates.lng}`;
-                    if (!addedRecCoords.has(coordKey)) {
-                        addedRecCoords.add(coordKey);
-                        
-                        const recMarker = L.marker([rec.coordinates.lat, rec.coordinates.lng], {
-                            icon: createRecIcon()
-                        }).addTo(map);
+          group.items.forEach(rec => {
+            if (rec.coordinates) {
+              const position = {
+                lat: rec.coordinates.lat,
+                lng: rec.coordinates.lng,
+              };
 
-                        const popupContent = `
-                            <div class="font-sans p-1 min-w-[180px]">
-                                <div class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider w-fit mb-2">
-                                    ${group.category}
-                                </div>
-                                <div class="text-sm font-bold text-slate-800 leading-tight mb-2">${rec.name}</div>
-                                <a href="https://www.google.com/maps/dir/?api=1&destination=${rec.coordinates.lat},${rec.coordinates.lng}" target="_blank" 
-                                class="block w-full text-center bg-amber-400 text-slate-900 text-xs font-bold py-2 rounded-lg mt-2 shadow-sm hover:bg-amber-500 transition-colors" 
-                                style="text-decoration: none; color: #0f172a !important;">
-                                📍 導航
-                                </a>
-                            </div>
-                        `;
-                        recMarker.bindPopup(popupContent, { closeButton: false, className: 'custom-popup' });
-                        markers.push(recMarker);
-                    }
-                }
-            });
+              const recMarker = new google.maps.Marker({
+                position,
+                map: googleMapRef.current!,
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 6,
+                  fillColor: '#fbbf24',
+                  fillOpacity: 1,
+                  strokeColor: '#ffffff',
+                  strokeWeight: 2,
+                },
+                title: rec.name,
+                zIndex: 0,
+              });
+
+              const recInfoContent = `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 12px; min-width: 200px;">
+                  <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 12px; text-transform: uppercase; display: inline-block; margin-bottom: 8px;">
+                    ${group.category}
+                  </div>
+                  <div style="font-size: 14px; font-weight: bold; color: #0f172a; margin-bottom: 12px;">${rec.name}</div>
+                  <a href="https://www.google.com/maps/dir/?api=1&destination=${position.lat},${position.lng}" 
+                     target="_blank" 
+                     style="display: block; text-align: center; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #0f172a; text-decoration: none; font-size: 12px; font-weight: bold; padding: 8px; border-radius: 10px;">
+                    📍 導航
+                  </a>
+                </div>
+              `;
+
+              const recInfoWindow = new google.maps.InfoWindow({
+                content: recInfoContent,
+              });
+
+              recMarker.addListener('click', () => {
+                recInfoWindow.open(googleMapRef.current!, recMarker);
+              });
+
+              markersRef.current.push(recMarker);
+            }
+          });
         });
       }
     });
 
-    // Draw Line and fit bounds
-    if (points.length > 1) {
-      L.polyline(points, {
-        color: '#fbbf24',
-        weight: 4,
-        opacity: 0.8,
-        dashArray: '10, 10',
-        lineCap: 'round'
-      }).addTo(map);
-
-      const group = new L.FeatureGroup(markers);
-      markerGroupRef.current = group;
-      // Fit bounds with better padding for mobile visibility and bottom button
-      map.fitBounds(group.getBounds().pad(0.35), {
-        animate: true,
-        duration: 1,
-        paddingBottomRight: [0, 120]
+    // Draw route lines between main itinerary points
+    if (points.length > 1 && showRouteLines) {
+      // Background line (subtle)
+      const backgroundLine = new google.maps.Polyline({
+        path: points,
+        geodesic: true,
+        strokeColor: '#94a3b8',
+        strokeOpacity: 0.4,
+        strokeWeight: 4,
+        map: googleMapRef.current,
+        zIndex: 1,
       });
-    } else if (points.length === 1) {
-      // If only one point, center on it with zoom 12
-      map.setView(points[0], 12);
+      polylinesRef.current.push(backgroundLine);
+
+      // Foreground animated line
+      const foregroundLine = new google.maps.Polyline({
+        path: points,
+        geodesic: true,
+        strokeColor: '#fbbf24',
+        strokeOpacity: 0.9,
+        strokeWeight: 6,
+        map: googleMapRef.current,
+        zIndex: 2,
+        icons: [
+          {
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 3,
+              fillColor: '#ffffff',
+              fillOpacity: 1,
+              strokeWeight: 0,
+            },
+            offset: '0',
+            repeat: '20px',
+          },
+        ],
+      });
+      polylinesRef.current.push(foregroundLine);
+
+      // Animate the line
+      let offset = 0;
+      const animateLine = () => {
+        offset = (offset + 1) % 20;
+        const icons = foregroundLine.get('icons');
+        icons[0].offset = offset + 'px';
+        foregroundLine.set('icons', icons);
+      };
+      const animationInterval = setInterval(animateLine, 50);
+
+      // Clean up animation on unmount
+      return () => clearInterval(animationInterval);
     }
-    // If no points, keep default Taiwan view
 
-  }, [scheduleData]);
+    // Add special transport route lines
+    // Day 1: Taipei to Taichung HSR
+    if (!selectedDay || selectedDay === '1/1') {
+      const taipeiHSR = { lat: 25.0478, lng: 121.2166 }; // Taipei HSR
+      const taichungHSR = { lat: 24.1120, lng: 120.6156 }; // Taichung HSR
+      
+      const day1TransportLine = new google.maps.Polyline({
+        path: [taipeiHSR, taichungHSR],
+        geodesic: true,
+        strokeColor: '#3b82f6',
+        strokeOpacity: 0.8,
+        strokeWeight: 5,
+        map: googleMapRef.current,
+        zIndex: 3,
+        icons: [
+          {
+            icon: {
+              path: 'M 0,-1 0,1',
+              strokeOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+              scale: 3,
+            },
+            offset: '0',
+            repeat: '15px',
+          },
+        ],
+      });
+      polylinesRef.current.push(day1TransportLine);
+    }
 
-  const handleRefresh = () => {
-    if (leafletMapRef.current && markerGroupRef.current) {
-        leafletMapRef.current.fitBounds(markerGroupRef.current.getBounds().pad(0.35), {
-            animate: true,
-            duration: 1,
-            paddingBottomRight: [0, 120]
-        });
-    } else if (leafletMapRef.current) {
-        // If no markers, reset to Taiwan center
-        leafletMapRef.current.setView([23.5, 120.8], 7.5, {
-            animate: true,
-            duration: 1
-        });
+    // Day 4: Kaohsiung (Zuoying) to Taipei
+    if (!selectedDay || selectedDay === '1/4') {
+      const zuoyingHSR = { lat: 22.6874, lng: 120.3090 }; // Zuoying HSR
+      const taoyuanHSR = { lat: 25.0136, lng: 121.2151 }; // Taoyuan HSR
+      
+      const day4TransportLine = new google.maps.Polyline({
+        path: [zuoyingHSR, taoyuanHSR],
+        geodesic: true,
+        strokeColor: '#10b981',
+        strokeOpacity: 0.8,
+        strokeWeight: 5,
+        map: googleMapRef.current,
+        zIndex: 3,
+        icons: [
+          {
+            icon: {
+              path: 'M 0,-1 0,1',
+              strokeOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+              scale: 3,
+            },
+            offset: '0',
+            repeat: '15px',
+          },
+        ],
+      });
+      polylinesRef.current.push(day4TransportLine);
+    }
+
+    // Day 3: Taichung to Pingtung
+    if (!selectedDay || selectedDay === '1/3') {
+      const taichungHSR = { lat: 24.1120, lng: 120.6156 }; // Taichung HSR
+      const pingtungArea = { lat: 22.6714, lng: 120.4870 }; // Pingtung meeting point
+      
+      const day3TransportLine = new google.maps.Polyline({
+        path: [taichungHSR, pingtungArea],
+        geodesic: true,
+        strokeColor: '#a855f7',
+        strokeOpacity: 0.8,
+        strokeWeight: 5,
+        map: googleMapRef.current,
+        zIndex: 3,
+        icons: [
+          {
+            icon: {
+              path: 'M 0,-1 0,1',
+              strokeOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+              scale: 3,
+            },
+            offset: '0',
+            repeat: '15px',
+          },
+        ],
+      });
+      polylinesRef.current.push(day3TransportLine);
+    }
+
+    // Fit map to show all markers
+    if (points.length > 0) {
+      googleMapRef.current.fitBounds(bounds, {
+        top: 50,
+        right: 50,
+        bottom: 150,
+        left: 50,
+      });
+    } else {
+      // Reset to Taiwan center if no points
+      googleMapRef.current.setCenter({ lat: 23.5, lng: 120.8 });
+      googleMapRef.current.setZoom(8);
+    }
+  }, [scheduleData, selectedDay, showRouteLines]);
+
+  const handleRecenter = () => {
+    if (!googleMapRef.current) return;
+
+    const bounds = new google.maps.LatLngBounds();
+    let hasPoints = false;
+
+    markersRef.current.forEach(marker => {
+      const position = marker.getPosition();
+      if (position) {
+        bounds.extend(position);
+        hasPoints = true;
+      }
+    });
+
+    if (hasPoints) {
+      googleMapRef.current.fitBounds(bounds, {
+        top: 50,
+        right: 50,
+        bottom: 150,
+        left: 50,
+      });
+    } else {
+      googleMapRef.current.setCenter({ lat: 23.5, lng: 120.8 });
+      googleMapRef.current.setZoom(8);
     }
   };
 
-  return (
-    <div className="w-full h-full rounded-3xl overflow-hidden shadow-inner relative">
-        <div ref={mapRef} className="w-full h-full pb-24 bg-slate-100" />
-        
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-[400]">
-           {/* Refresh Button */}
-           <button
-             onClick={handleRefresh}
-             className="bg-white/95 backdrop-blur p-3 rounded-full shadow-xl border border-slate-100 text-slate-600 font-bold flex items-center justify-center hover:scale-105 transition-transform hover:bg-slate-50"
-             title="重置視角"
-           >
-              <RefreshCw size={20} />
-           </button>
+  const uniqueDays = Array.from(new Set(scheduleData.map(day => day.date)));
 
-           {/* Google Maps List Button */}
-           <a href="https://www.google.com/maps/@24.1440561,120.6380966,7202m/data=!3m1!1e3!4m2!11m1!2s0GgFTRMWEFNkrNB-5FVVOQxuIi5HzQ!5m1!1e2?entry=ttu&g_ep=EgoyMDI1MTIwOS4wIKXMDSoASAFQAw%3D%3D" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="bg-white/95 backdrop-blur p-3 rounded-full shadow-xl border border-slate-100 text-blue-500 font-bold flex items-center justify-center hover:scale-105 transition-transform"
-              title="開啟 Google Maps"
-           >
-              <MapIcon size={20} />
-           </a>
+  return (
+    <div className="w-full h-full relative bg-slate-100">
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-white z-[500] flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-600 font-semibold">載入地圖中...</p>
+          </div>
         </div>
-        
-        <style>{`
-            /* Map container styles */
-            .leaflet-container {
-                width: 100%;
-                height: 100%;
-                background: #f1f5f9;
-            }
+      )}
+
+      {/* Map Container */}
+      <div ref={mapRef} className="w-full h-full" />
+
+      {/* Bottom Controls */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-4 z-[400]">
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          {/* Day Filter */}
+          <div className="flex-1 relative">
+            <button
+              onClick={() => setShowDayFilter(!showDayFilter)}
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-semibold text-sm flex items-center justify-between transition-colors"
+            >
+              <span>{selectedDay || '所有天數'}</span>
+              <ChevronDown size={18} className={`transition-transform ${showDayFilter ? 'rotate-180' : ''}`} />
+            </button>
             
-            /* Move zoom control to bottom right */
-            .leaflet-top.leaflet-left {
-                top: auto;
-                bottom: 20px;
-                left: auto;
-                right: 20px;
-            }
-            
-            /* Popup styles */
-            .leaflet-popup-content-wrapper { 
-                border-radius: 1rem; 
-                padding: 0; 
-                overflow: hidden; 
-                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
-            }
-            .leaflet-popup-content { 
-                margin: 0.75rem; 
-                line-height: 1.5; 
-            }
-            .leaflet-popup-tip { 
-                background: white; 
-            }
-            
-            /* User location marker */
-            .user-pulse-icon { 
-                position: relative; 
-            }
-            .user-dot { 
-                width: 12px; 
-                height: 12px; 
-                background-color: #3b82f6; 
-                border: 2px solid white; 
-                border-radius: 50%; 
-                position: absolute; 
-                top: 6px; 
-                left: 6px; 
-                z-index: 2; 
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
-            }
-            .pulse-ring { 
-                position: absolute; 
-                top: 0; 
-                left: 0; 
-                width: 24px; 
-                height: 24px; 
-                background-color: rgba(59, 130, 246, 0.4); 
-                border-radius: 50%; 
-                animation: pulse 2s infinite; 
-            }
-            @keyframes pulse { 
-                0% { transform: scale(0.5); opacity: 1; } 
-                100% { transform: scale(2); opacity: 0; } 
-            }
-        `}</style>
+            {showDayFilter && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden max-h-64 overflow-y-auto">
+                <button
+                  onClick={() => {
+                    setSelectedDay(null);
+                    setShowDayFilter(false);
+                  }}
+                  className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                    !selectedDay ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  所有天數
+                </button>
+                {uniqueDays.map(day => (
+                  <button
+                    key={day}
+                    onClick={() => {
+                      setSelectedDay(day);
+                      setShowDayFilter(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                      selectedDay === day ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Toggle Route Lines */}
+          <button
+            onClick={() => setShowRouteLines(!showRouteLines)}
+            className={`px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              showRouteLines
+                ? 'bg-amber-400 text-slate-900 hover:bg-amber-500'
+                : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+            }`}
+            title={showRouteLines ? '隱藏路線' : '顯示路線'}
+          >
+            路線
+          </button>
+
+          {/* Recenter Button */}
+          <button
+            onClick={handleRecenter}
+            className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl shadow-lg transition-all active:scale-95"
+            title="重置視角"
+          >
+            <RefreshCw size={20} />
+          </button>
+
+          {/* Google Maps Link */}
+          <a
+            href="https://www.google.com/maps/@/data=!3m1!4b1!4m3!11m2!2s0GgFTRMWEFNkrNB-5FVVOQxuIi5HzQ!4sQ8sHbSBXEXc?g_ep=EgoyMDI1MTIwOS4wKgosMTAwNzkyMDY3SAFQAw%3D%3D"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-green-600 hover:bg-green-700 text-white p-3 rounded-xl shadow-lg transition-all active:scale-95"
+            title="開啟 Google Maps"
+          >
+            <MapIcon size={20} />
+          </a>
+        </div>
+      </div>
     </div>
   );
 };

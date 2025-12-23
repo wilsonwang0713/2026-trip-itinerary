@@ -4,17 +4,19 @@ import { DaySchedule } from './types';
 import { DaySection } from './components/DaySection';
 import { ThreeWeather } from './components/ThreeWeather';
 import { LoginGate } from './components/LoginGate';
-import { MapTrajectory } from './components/MapTrajectory';
 import { HealingMessage } from './components/HealingMessage';
-import { Map, Plane, List, CloudSun, Heart } from 'lucide-react';
+import { MapTrajectory } from './components/MapTrajectory';
+import { TravelDashboard } from './components/TravelDashboard';
+import { Plane, CloudSun, Heart, Map, List } from 'lucide-react';
 import { subscribeToItinerary, isConfigured } from './firebaseUtils';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [viewMode, setViewMode] = useState<'LIST' | 'MAP'>('LIST');
   const [scheduleData, setScheduleData] = useState<DaySchedule[]>(ITINERARY_DATA);
   const [showWeather, setShowWeather] = useState(false);
   const [showHealingMessage, setShowHealingMessage] = useState(false);
+  const [showMapView, setShowMapView] = useState(false);
+
 
   // Subscribe to Firebase updates if configured
   useEffect(() => {
@@ -57,129 +59,113 @@ const App: React.FC = () => {
       return <LoginGate onUnlock={() => setIsAuthenticated(true)} />;
   }
 
-  // Full-screen Map View
-  if (viewMode === 'MAP') {
-    return (
-      <div className="w-full h-screen bg-slate-900 font-sans text-gray-900 selection:bg-pink-200 relative">
-        {/* Full-screen Map */}
-        <div className="w-full h-full">
-          <MapTrajectory scheduleData={scheduleData} />
-        </div>
-
-        {/* Back to List View Button */}
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-none px-6">
-          <button 
-            onClick={() => setViewMode('LIST')}
-            className="pointer-events-auto bg-slate-800 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center justify-center gap-2 font-bold transform transition active:scale-95 hover:bg-slate-700 border-2 border-slate-700"
-          >
-            <List size={18} />
-            <span>Back to List</span>
-          </button>
-        </div>
-
-        {/* 3D Weather Modal */}
-        {showWeather && (
-          <ThreeWeather 
-            day="Today" 
-            onClose={() => setShowWeather(false)} 
-          />
-        )}
-
-        {/* Hidden Healing Message */}
-        {showHealingMessage && (
-          <HealingMessage onClose={() => setShowHealingMessage(false)} />
-        )}
-      </div>
-    );
-  }
-
-  // List View (Default)
+  // Render Map, Dark Dashboard, or List View
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex justify-center font-sans text-gray-900 selection:bg-pink-200">
       <div className="w-full max-w-md bg-white shadow-2xl min-h-screen flex flex-col relative">
         
-        {/* Main Header with Texture */}
-        <header className="bg-[#2d3748] text-white pt-12 pb-10 px-6 rounded-b-[2.5rem] shadow-lg mb-0 relative overflow-hidden flex-shrink-0">
-           {/* Grainy texture overlay */}
-           <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
-           
-           <div className="absolute top-0 right-0 p-8 opacity-5 transform rotate-12">
-                <Plane size={120} />
-           </div>
-           
-           <div className="relative z-10">
-              <div className="flex justify-between items-start">
-                  <div className="inline-block px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-medium tracking-wider mb-3 shadow-sm">
-                    TRAVEL LOG
-                  </div>
-                  
-                  <div className="flex gap-2 items-center">
-                      <div className="flex flex-col items-center relative">
-                        {/* Heart Trigger Icon */}
-                        <button 
-                          onDoubleClick={() => setShowHealingMessage(true)}
-                          className="bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-sm transition-colors cursor-pointer active:scale-90 relative z-10"
-                          title="Double tap to open"
-                        >
-                            <Heart size={20} className="text-pink-300 fill-pink-300/50" />
-                        </button>
-                        {/* Hint Text */}
-                        <span className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-[9px] text-white/50 tracking-wider whitespace-nowrap opacity-80 pointer-events-none">
-                            click x2
-                        </span>
+        {showMapView ? (
+          // Map View - Full screen
+          <>
+            <MapTrajectory scheduleData={scheduleData} />
+            
+            {/* Floating Toggle Button - Map to List */}
+            <button
+              onClick={() => setShowMapView(false)}
+              className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-slate-700 to-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:scale-105 transition-transform active:scale-95 z-[500]"
+              style={{ maxWidth: 'calc(100vw - 2rem)' }}
+            >
+              <List size={20} />
+              <span>返回列表</span>
+            </button>
+          </>
+        ) : (
+          // List View
+          <>
+            {/* Main Header with Texture */}
+            <header className="bg-[#2d3748] text-white pt-12 pb-10 px-6 rounded-b-[2.5rem] shadow-lg mb-0 relative overflow-hidden flex-shrink-0">
+               {/* Grainy texture overlay */}
+               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+               
+               <div className="absolute top-0 right-0 p-8 opacity-5 transform rotate-12">
+                    <Plane size={120} />
+               </div>
+               
+               <div className="relative z-10">
+                  <div className="flex justify-between items-start">
+                      <div className="inline-block px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-xs font-medium tracking-wider mb-3 shadow-sm">
+                        TRAVEL LOG
                       </div>
+                      
+                      <div className="flex gap-2 items-center">
+                          <div className="flex flex-col items-center relative">
+                            {/* Heart Trigger Icon */}
+                            <button 
+                              onDoubleClick={() => setShowHealingMessage(true)}
+                              className="bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-sm transition-colors cursor-pointer active:scale-90 relative z-10"
+                              title="Double tap to open"
+                            >
+                                <Heart size={20} className="text-pink-300 fill-pink-300/50" />
+                            </button>
+                            {/* Hint Text */}
+                            <span className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-[9px] text-white/50 tracking-wider whitespace-nowrap opacity-80 pointer-events-none">
+                                click x2
+                            </span>
+                          </div>
 
-                      {/* Weather Trigger Icon */}
-                      <button 
-                        onClick={() => setShowWeather(true)}
-                        className="bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-sm transition-colors"
-                      >
-                          <CloudSun size={24} className="text-yellow-300" />
-                      </button>
+                          {/* Weather Trigger Icon */}
+                          <button 
+                            onClick={() => setShowWeather(true)}
+                            className="bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-sm transition-colors"
+                          >
+                              <CloudSun size={24} className="text-yellow-300" />
+                          </button>
+
+
+                      </div>
                   </div>
+                  <h1 className="text-3xl font-bold mb-1 tracking-tight drop-shadow-md">{TRIP_TITLE}</h1>
+                  <p className="text-gray-400 text-lg font-light tracking-wide">{TRIP_SUBTITLE}</p>
+               </div>
+            </header>
+
+            {/* Content Area */}
+            <main className="flex-1 px-4 mt-[-20px] bg-contain relative z-20 pb-32" style={{ backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+              <div className="mt-8">
+                {scheduleData.map((day, index) => (
+                  <div key={day.date}>
+                    <DaySection 
+                      day={day} 
+                      isLastDay={index === scheduleData.length - 1} 
+                    />
+                  </div>
+                ))}
               </div>
-              <h1 className="text-3xl font-bold mb-1 tracking-tight drop-shadow-md">{TRIP_TITLE}</h1>
-              <p className="text-gray-400 text-lg font-light tracking-wide">{TRIP_SUBTITLE}</p>
-           </div>
-        </header>
+            </main>
 
-        {/* Content Area */}
-        <main className="flex-1 px-4 mt-[-20px] bg-contain relative z-20 pb-32" style={{ backgroundImage: 'radial-gradient(#e5e7eb 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
-          <div className="mt-8">
-            {scheduleData.map((day, index) => (
-              <div key={day.date}>
-                <DaySection 
-                  day={day} 
-                  isLastDay={index === scheduleData.length - 1} 
-                />
-              </div>
-            ))}
-          </div>
-        </main>
+            {/* Floating Toggle Button - List to Map */}
+            <button
+              onClick={() => setShowMapView(true)}
+              className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:scale-105 transition-transform active:scale-95 z-[500]"
+              style={{ maxWidth: 'calc(100vw - 2rem)' }}
+            >
+              <Map size={20} />
+              <span>地圖檢視</span>
+            </button>
 
-        {/* Footer / Floating Action */}
-        <div className="fixed bottom-8 left-0 right-0 flex justify-center gap-4 z-40 pointer-events-none px-6 w-full max-w-md mx-auto">
-          {/* Map View Button */}
-          <button 
-            onClick={() => setViewMode('MAP')}
-            className="pointer-events-auto flex-1 bg-slate-800 text-white py-3 rounded-2xl shadow-xl flex items-center justify-center gap-2 font-bold transform transition active:scale-95 hover:bg-slate-700 border-2 border-slate-700"
-          >
-            <Map size={18} />
-            <span>Map View</span>
-          </button>
-        </div>
+            {/* 3D Weather Modal */}
+            {showWeather && (
+              <ThreeWeather 
+                day="Today" 
+                onClose={() => setShowWeather(false)} 
+              />
+            )}
 
-        {/* 3D Weather Modal */}
-        {showWeather && (
-          <ThreeWeather 
-            day="Today" 
-            onClose={() => setShowWeather(false)} 
-          />
-        )}
-
-        {/* Hidden Healing Message (Triggered via Heart Icon) */}
-        {showHealingMessage && (
-          <HealingMessage onClose={() => setShowHealingMessage(false)} />
+            {/* Hidden Healing Message (Triggered via Heart Icon) */}
+            {showHealingMessage && (
+              <HealingMessage onClose={() => setShowHealingMessage(false)} />
+            )}
+          </>
         )}
 
       </div>
