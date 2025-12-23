@@ -1,0 +1,7 @@
+{
+  "name": "2026 Trip Itinerary",
+  "description": "A mobile-first travel itinerary for Taichung and Pingtung trip, Jan 1-4, 2026.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
