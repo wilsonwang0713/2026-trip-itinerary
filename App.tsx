@@ -62,26 +62,24 @@ const App: React.FC = () => {
   // Render Map, Dark Dashboard, or List View
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex justify-center font-sans text-gray-900 selection:bg-pink-200">
-      <div className="w-full max-w-md bg-white shadow-2xl min-h-screen flex flex-col relative">
-        
-        {showMapView ? (
-          // Map View - Full screen
-          <>
-            <MapTrajectory scheduleData={scheduleData} />
-            
-            {/* Floating Toggle Button - Map to List */}
-            <button
-              onClick={() => setShowMapView(false)}
-              className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-slate-700 to-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:scale-105 transition-transform active:scale-95 z-[500]"
-              style={{ maxWidth: 'calc(100vw - 2rem)' }}
-            >
-              <List size={20} />
-              <span>返回列表</span>
-            </button>
-          </>
-        ) : (
-          // List View
-          <>
+      {showMapView ? (
+        // Map View - Full screen (outside container)
+        <div className="fixed inset-0 z-50">
+          <MapTrajectory scheduleData={scheduleData} />
+          
+          {/* Floating Toggle Button - Map to List */}
+          <button
+            onClick={() => setShowMapView(false)}
+            className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-slate-700 to-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 font-bold hover:scale-105 transition-transform active:scale-95 z-[500]"
+            style={{ maxWidth: 'calc(100vw - 2rem)' }}
+          >
+            <List size={20} />
+            <span>返回列表</span>
+          </button>
+        </div>
+      ) : (
+        <div className="w-full max-w-md bg-white shadow-2xl min-h-screen flex flex-col relative">
+          {/* List View */}
             {/* Main Header with Texture */}
             <header className="bg-[#2d3748] text-white pt-12 pb-10 px-6 rounded-b-[2.5rem] shadow-lg mb-0 relative overflow-hidden flex-shrink-0">
                {/* Grainy texture overlay */}
@@ -165,8 +163,8 @@ const App: React.FC = () => {
             {showHealingMessage && (
               <HealingMessage onClose={() => setShowHealingMessage(false)} />
             )}
-          </>
-        )}
+        </div>
+      )}
 
       </div>
     </div>
